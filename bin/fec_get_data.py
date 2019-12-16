@@ -14,6 +14,48 @@ def fec():
         "per_page": 100,
     }
 
+    committees = []
+
+    def get_committee(candidate_id):
+        url = "https://api.open.fec.gov/v1/candidate/{}/committees/".format(candidate_id)
+        params = fec_params.copy()
+        params.update({
+            "committee_type": "P",
+            "cycle": 2020,
+        })
+
+        r = s.get(url, params=params)
+        meta = {
+            "request_id": r.request_id,
+        }
+
+        @try_response
+        def get_committee_id(r):
+            results = r.json()["results"]
+            m = meta.copy()
+            m["committee_count"] = len(results)
+            logger.debug("Found committees.", extra=m)
+
+            if results:
+                committee_ids = [c["committee_id"] for c in results]
+                m = meta.copy()
+                m["committee_ids"] = committee_ids
+                logger.debug("Found committees.", extra=m)
+                return committee_ids
+            else:
+                logger.warning("Found no committee for candidate!", extra=meta)
+
+            return None
+
+        committee_ids = get_committee_id(r)
+
+        if committee_ids:
+            committees.extend(committee_ids)
+
+    logger.info("Getting committees by candidates...")
+    sr.multiprocess(get_committee, candidates)
+
+    logger.info("Combining candidates and committees for schedule e and a, respectively...")
     schedule_a = [{
         "committee_id": c,
         "sourcetype": "fec_schedule_a",
@@ -115,7 +157,6 @@ if __name__ == "__main__":
 
     index = "main" if script_args.test else sr.config["fec"]["index"]
     api_key = sr.config["fec"]["api_key"]
-    committees = sr.config["fec"]["committees"]
     candidates = sr.config["fec"]["candidates"]
 
     fec()
