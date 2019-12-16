@@ -14,9 +14,9 @@ def fec():
         "per_page": 100,
     }
 
-    committees = []
+    schedule_a = []
 
-    def get_committee(candidate_id):
+    def get_committees(candidate_id):
         url = "https://api.open.fec.gov/v1/candidate/{}/committees/".format(candidate_id)
         params = fec_params.copy()
         params.update({
@@ -27,39 +27,35 @@ def fec():
         r = s.get(url, params=params)
         meta = {
             "request_id": r.request_id,
+            "candidate_id": candidate_id,
         }
 
         @try_response
-        def get_committee_id(r):
+        def get_committee_args(r):
             results = r.json()["results"]
-            m = meta.copy()
-            m["committee_count"] = len(results)
-            logger.debug("Found committees.", extra=m)
 
             if results:
-                committee_ids = [c["committee_id"] for c in results]
+                committee_args = [{
+                    "committee_id": c["committee_id"],
+                    "candidate_id": candidate_id,
+                    "sourcetype": "fec_schedule_a",
+                } for c in results]
                 m = meta.copy()
-                m["committee_ids"] = committee_ids
+                m["committee_args"] = committee_args
+                m["committee_count"] = len(committee_args)
                 logger.debug("Found committees.", extra=m)
-                return committee_ids
+                return committee_args
             else:
-                logger.warning("Found no committee for candidate!", extra=meta)
+                logger.warning("Found no committees for candidate!", extra=meta)
 
-            return None
+            return []
 
-        committee_ids = get_committee_id(r)
-
-        if committee_ids:
-            committees.extend(committee_ids)
+        schedule_a.extend(get_committee_args(r))
 
     logger.info("Getting committees by candidates...")
-    sr.multiprocess(get_committee, candidates)
+    sr.multiprocess(get_committees, candidates)
 
     logger.info("Combining candidates and committees for schedule e and a, respectively...")
-    schedule_a = [{
-        "committee_id": c,
-        "sourcetype": "fec_schedule_a",
-    } for c in committees]
     schedule_e = [{
         "candidate_id": c,
         "sourcetype": "fec_schedule_e",
@@ -70,20 +66,22 @@ def fec():
         logger.debug("Getting data...", extra=fec_arg)
 
         sourcetype = fec_arg["sourcetype"]
+        candidate_id = fec_arg["candidate_id"]
+        committee_id = fec_arg.get("committee_id", None)
 
         params = fec_params.copy()
 
         if sourcetype == "fec_schedule_a":
             url = "https://api.open.fec.gov/v1/schedules/schedule_a/"
             params.update({
-                "committee_id": fec_arg["committee_id"],
+                "committee_id": committee_id,
                 "is_individual": True,
                 "two_year_transaction_period": 2020,
             })
         else:
             url = "https://api.open.fec.gov/v1/schedules/schedule_e/"
             params.update({
-                "candidate_id": fec_arg["candidate_id"],
+                "candidate_id": candidate_id,
                 "cycle": 2020,
                 "is_notice": False,
                 "data_type": "processed"
@@ -110,7 +108,11 @@ def fec():
                 result["splunk_rest"] = {
                     "session_id": sr.session_id,
                     "request_id": r.request_id,
+                    "candidate_id": candidate_id,
                 }
+
+                if sourcetype == "fec_schedule_a":
+                    result["splunk_rest"]["committee_id"] = committee_id
 
                 event = {
                     "index": index,
