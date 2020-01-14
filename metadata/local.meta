@@ -2,3 +2,11 @@
 owner = skawasaki@splunk.com
 version = 8.0.0
 modtime = 1576237901.848642000
+
+[inputs/script%3A%2F%2F.%2Fbin%2Fpoll_get_data.sh]
+version = 8.0.1
+modtime = 1578985092.482053000
+
+[inputs/script%3A%2F%2F.%2Fbin%2Ffec_get_data.sh]
+version = 8.0.1
+modtime = 1578985097.713450000
