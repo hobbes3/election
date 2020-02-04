@@ -52,11 +52,15 @@ def get_committee_args(r, candidate_id):
         committee_args = []
         for result in results:
             committee_id = result["committee_id"]
-            committee_args.append({
+            committee_args.extend([{
                 "committee_id": committee_id,
                 "candidate_id": candidate_id,
                 "sourcetype": "fec_schedule_a_zip",
-            })
+            }, {
+                "committee_id": committee_id,
+                "candidate_id": candidate_id,
+                "sourcetype": "fec_schedule_a_size",
+            }])
 
             url = "https://api.open.fec.gov/v1/committee/{}/".format(committee_id)
             r = s.get(url, params=fec_params)
@@ -83,6 +87,11 @@ def get_data(fec_arg):
 
     if sourcetype == "fec_schedule_a_zip":
         url = "https://api.open.fec.gov/v1/schedules/schedule_a/by_zip/"
+        params.update({
+            "committee_id": committee_id,
+        })
+    elif sourcetype == "fec_schedule_a_size":
+        url = "https://api.open.fec.gov/v1/schedules/schedule_a/by_size/"
         params.update({
             "committee_id": committee_id,
         })
@@ -137,11 +146,11 @@ def send_data(r, fec_arg, params, meta):
             "candidate": next((c for c in candidate_info if c["candidate_id"] == candidate_id), {}),
         }
 
-        if sourcetype == "fec_schedule_a_zip":
+        if sourcetype.startswith("fec_schedule_a"):
             result["splunk_rest"]["committee_id"] = committee_id
             result["splunk_rest"]["committee"] = next((c for c in committee_info if c["committee_id"] == committee_id), {})
 
-        index = index_slice if sourcetype=="fec_schedule_a_zip" else index_full
+        index = index_slice if sourcetype.startswith("fec_schedule_a") else index_full
 
         event = {
             "index": index,
@@ -157,7 +166,7 @@ def send_data(r, fec_arg, params, meta):
 
     done = False
 
-    if sourcetype == "fec_schedule_a_zip":
+    if sourcetype.startswith("fec_schedule_a"):
         page = pagination["page"]
         pages = pagination["pages"]
         if page >= pages:
